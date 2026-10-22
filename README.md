@@ -16,7 +16,8 @@ Python 3.10 trở lên. Phụ thuộc: NumPy, OpenCV (headless), ONNX Runtime, P
 
 ## Model
 
-Gói không kèm weights. TrueOCR đọc một thư mục model gồm:
+Gói kèm sẵn weights trong `trueocr/models/` (~8 MB), cài xong dùng được ngay.
+Thư mục model gồm:
 
 | File | Vai trò |
 |---|---|
@@ -26,8 +27,8 @@ Gói không kèm weights. TrueOCR đọc một thư mục model gồm:
 | `order.onnx` | Sắp thứ tự đọc các dòng |
 | `meta.json` | Tên model, bảng ký tự, tham số tiền xử lý |
 
-Chế độ `line` chỉ cần `rec.onnx` và `meta.json`. Truyền đường dẫn bằng
-`model_dir=` (Python) hoặc `--model-dir` (CLI).
+Chế độ `line` chỉ cần `rec.onnx` và `meta.json`. Dùng model khác thì truyền
+đường dẫn bằng `model_dir=` (Python) hoặc `--model-dir` (CLI).
 
 ## Dùng nhanh
 
@@ -143,13 +144,9 @@ twine check dist/*
 twine upload dist/*
 ```
 
-Để gói kèm sẵn weights, đặt các file model vào `trueocr/models/` và khai báo
-trong `pyproject.toml`:
-
-```toml
-[tool.setuptools.package-data]
-trueocr = ["models/*"]
-```
+Weights không nằm trong git: chỉ build từ thư mục đã có đủ
+file trong `trueocr/models/`, và kiểm tra `unzip -l dist/*.whl | grep models`
+trước khi upload.
 
 ## License
 
