@@ -1,0 +1,10 @@
+__pycache__/
+*.egg-info/
+build/
+dist/
+.venv/
+.pytest_cache/
+.ipynb_checkpoints/
+trueocr_outputs/
+# Model weights are not part of this repository.
+*.onnx

@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "trueocr"
+dynamic = ["version"]
+description = "OCR tiếng Việt trên CPU với ONNX Runtime, không cần GPU hay PyTorch"
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+dependencies = [
+  "numpy",
+  "opencv-python-headless",
+  "onnxruntime",
+  "pillow",
+]
+keywords = ["ocr", "vietnamese", "onnx", "cpu"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Natural Language :: Vietnamese",
+  "Topic :: Scientific/Engineering :: Image Recognition",
+]
+
+[project.optional-dependencies]
+notebook = ["ipython"]
+test = ["pytest"]
+
+[project.scripts]
+trueocr = "trueocr.cli:main"
+
+[tool.setuptools]
+packages = ["trueocr"]
+
+[tool.setuptools.dynamic]
+version = {attr = "trueocr.__version__"}
