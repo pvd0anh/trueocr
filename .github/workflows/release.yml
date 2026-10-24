@@ -1,0 +1,132 @@
+name: Publish to PyPI
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag, for example v0.1.1"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pypi-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Test and build distributions
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: refs/tags/${{ inputs.tag || github.ref_name }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.10"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install build and test dependencies
+        run: python -m pip install build twine ".[test]"
+      - name: Check that tag matches package version
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          python - <<'PY'
+          import os
+          from trueocr import __version__
+
+          expected = f"v{__version__}"
+          actual = os.environ["RELEASE_TAG"]
+          if actual != expected:
+              raise SystemExit(f"Tag {actual!r} does not match package version: expected {expected!r}")
+          print(f"Release tag: {actual}")
+          PY
+      - name: Run tests with bundled models
+        env:
+          TRUEOCR_MODEL_DIR: ${{ github.workspace }}/trueocr/models
+        run: python -m pytest -q
+      - name: Build wheel and source distribution
+        run: python -m build
+      - name: Check package metadata
+        run: python -m twine check dist/*
+      - name: Verify bundled models in both distributions
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from email.parser import BytesParser
+          import tarfile
+          import zipfile
+          from trueocr import __version__
+
+          wheels = list(Path("dist").glob("*.whl"))
+          sdists = list(Path("dist").glob("*.tar.gz"))
+          assert len(wheels) == len(sdists) == 1, "Expected one wheel and one sdist"
+          models = ["rec.onnx", "det.onnx", "orient.onnx", "order.onnx", "meta.json"]
+          with zipfile.ZipFile(wheels[0]) as wheel, tarfile.open(sdists[0]) as sdist:
+              metadata_path = next(name for name in wheel.namelist() if name.endswith(".dist-info/METADATA"))
+              metadata = BytesParser().parsebytes(wheel.read(metadata_path))
+              assert metadata["Name"] == "trueocr"
+              assert metadata["Version"] == __version__
+              prefix = sdists[0].name.removesuffix(".tar.gz")
+              for name in models:
+                  path = f"trueocr/models/{name}"
+                  expected = Path(path).read_bytes()
+                  assert wheel.read(path) == expected, f"Wheel model mismatch: {name}"
+                  assert sdist.extractfile(f"{prefix}/{path}").read() == expected, f"Sdist model mismatch: {name}"
+          print("Wheel and sdist contain all five matching model files")
+          PY
+      - name: Check installed wheel outside the source tree
+        env:
+          SAMPLE_IMAGE: ${{ github.workspace }}/examples/sample.png
+        run: |
+          python -m pip install --force-reinstall --no-deps dist/*.whl
+          cd "$RUNNER_TEMP"
+          python - <<'PY'
+          import os
+          import trueocr
+
+          assert "site-packages" in trueocr.__file__, trueocr.__file__
+          model = trueocr.load_model(threads=1)
+          result = model.predict(os.environ["SAMPLE_IMAGE"])
+          assert len(result.lines) == 6
+          assert result.lines[3]["text"] == "Ngày sinh: 01/01/1990"
+          crop = result.image.crop(result.lines[3]["bbox"])
+          assert model.predict(crop, mode="line").text == result.lines[3]["text"]
+          print(f"Installed TrueOCR {trueocr.__version__}: page and line inference passed")
+          PY
+          trueocr --help
+      - name: Store distributions for publishing
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: python-distributions
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+  publish:
+    name: Publish to PyPI
+    needs: build
+    if: github.repository == 'pvd0anh/trueocr'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: pypi
+      url: https://pypi.org/project/trueocr/
+    permissions:
+      id-token: write
+    steps:
+      - name: Download tested distributions
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        with:
+          name: python-distributions
+          path: dist/
+      - name: Publish using PyPI Trusted Publishing
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
