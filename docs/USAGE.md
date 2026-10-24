@@ -1,90 +1,135 @@
-# Hướng dẫn sử dụng
+# Sử dụng
 
-## Model
+Python ≥3.10. `pip install trueocr` cài cả code và model; inference chạy
+offline trên CPU. Jupyter cần thêm `pip install "trueocr[notebook]"`.
 
-Gói kèm sẵn weights trong `trueocr/models/` (~8 MB), cài xong dùng được ngay.
-Thư mục model gồm:
-
-| File | Vai trò |
-|---|---|
-| `rec.onnx` | Nhận dạng ký tự trên crop từng dòng (CTC) |
-| `det.onnx` | Phát hiện bbox từng dòng chữ |
-| `orient.onnx` | Xác định hướng xoay của ảnh |
-| `order.onnx` | Sắp thứ tự đọc các dòng |
-| `meta.json` | Tên model, bảng ký tự, tham số tiền xử lý |
-
-Chế độ `line` chỉ cần `rec.onnx` và `meta.json`. Dùng model khác thì truyền
-đường dẫn bằng `model_dir=` (Python) hoặc `--model-dir` (CLI).
-
-## Nhận dạng từng dòng với Recognizer
+## Python
 
 ```python
-from trueocr import Recognizer
+from trueocr import load_model
 
-ocr = Recognizer("/duong/dan/models", threads=1)
-predictions = ocr.predict([bgr_array, png_bytes, "crop.jpg"], batch_size=32)
-print(predictions[0].text, predictions[0].confidence)
+model = load_model(threads=2)
+result = model.predict("anh.jpg")
+
+print(result.text)
+for line in result.lines:
+    print(line["text"], line["bbox"], line["confidence"])
+
+result.save("output")
 ```
 
-## Hai chế độ
+Load model một lần, dùng lại cho các ảnh sau. `predict()` nhận `str`, `Path`,
+encoded image bytes hoặc `PIL.Image`. Đường dẫn tương đối tính từ thư mục
+đang chạy. PDF cần render thành ảnh trước.
 
-**`page`** (mặc định), cho ảnh nhiều dòng:
-
-1. Đọc ảnh, áp EXIF, ghép nền trắng cho ảnh trong suốt, chuyển grayscale.
-2. Ước lượng độ nghiêng (tối đa 45°), `orient.onnx` xác định hướng xoay, rồi xoay và khử nghiêng.
-3. `det.onnx` phát hiện bbox từng dòng; ảnh chữ nhỏ được phát hiện lại ở độ phân giải cao hơn.
-4. Cắt từng dòng, `rec.onnx` nhận dạng, giải mã CTC greedy, chuẩn hóa Unicode NFC.
-5. `order.onnx` gom khối và sắp thứ tự đọc; ghép các dòng bằng ký tự xuống dòng.
-
-**`line`**, cho ảnh đã crop sát một dòng nằm ngang: bỏ qua bước 2, 3 và 5.
+| Mode | Input | Pipeline |
+|---|---|---|
+| `page` — mặc định | Ảnh nhiều dòng | Orientation, deskew, text detection, recognition, reading order |
+| `line` | Crop sát một dòng nằm ngang | Recognition trực tiếp, bỏ qua detector và orientation/deskew |
 
 ```python
-model.predict("crop.png", mode="line")
+result = model.predict("crop.png", mode="line")
 ```
 
 ## Kết quả
 
-`result.data` (cũng là JSON được lưu) gồm:
+| Attribute | Nội dung |
+|---|---|
+| `result.text` | Text các dòng, nối bằng `\n` |
+| `result.lines` | Danh sách `index`, `text`, `bbox`, `confidence`, `low_confidence` |
+| `result.image` | Ảnh sau preprocessing, chưa vẽ bbox |
+| `result.data` | Dữ liệu JSON: text, lines, model, mode, image size, rotation, latency |
+| `result.files` | Đường dẫn `text`, `json`, `preview` sau khi lưu |
 
-- `text`: toàn bộ text, mỗi dòng một hàng.
-- `lines`: `index`, `text`, `confidence`, `bbox` `[x0, y0, x1, y1]`, `low_confidence`.
-- `rotation_clockwise_degrees`, `skew_degrees`: góc đã xoay và khử nghiêng.
-- `bbox_coordinate_system`: ở chế độ `page`, bbox thuộc ảnh đã xoay/khử nghiêng
-  (`result.image`); ở chế độ `line`, bbox thuộc ảnh gốc sau khi áp EXIF.
-- `model`, `mode`, `image_size`, `elapsed_ms`, `created_at`.
+`bbox` có dạng `[x0, y0, x1, y1]`. Ở mode `page`, tọa độ thuộc
+`result.image` sau rotation/deskew; ở mode `line`, thuộc ảnh sau áp EXIF.
+Kiểm tra `result.data["bbox_coordinate_system"]` khi ghép với ảnh gốc.
 
-`confidence` là trung bình xác suất đỉnh CTC, chưa hiệu chuẩn thành xác suất
-text đúng. `low_confidence` chỉ đánh dấu dòng cần xem lại, text vẫn được giữ.
+`confidence` là mean CTC peak probability, chưa được calibrate thành xác suất
+dòng đúng. `low_confidence` chỉ đánh dấu dòng dưới threshold; text vẫn được
+trả về. Text detection không tìm được dòng thì `text == ""` và `lines == []`.
 
-## Cấu hình
+`result.save("output")` ghi `.txt` UTF-8, `.json`, `_boxes.png` với timestamp
+trong tên file và trả về dict đường dẫn. `result.show()` hiển thị text,
+bbox và confidence trong Jupyter.
+
+Mặc định `predict()` không ghi file. Có thể bật cho cả model hoặc từng ảnh:
+
+```python
+model = load_model(save_outputs=True, output_dir="output")
+result = model.predict("anh.jpg", save=False)  # Override cho lần gọi này
+```
+
+## Config
+
+Truyền trực tiếp vào `load_model(...)` hoặc qua `OCRConfig`. Keyword argument
+override field tương ứng trong config.
+
+| Parameter | Default | Ý nghĩa |
+|---|---|---|
+| `model_dir` | Model kèm package | Thư mục weights và `meta.json` |
+| `mode` | `"page"` | `page` hoặc `line` |
+| `threads` | `min(4, số CPU)` | Thread mỗi ONNX session; mode page còn dùng cho deskew |
+| `batch_size` | `32` | Số dòng tối đa mỗi batch recognition |
+| `auto_rotate` | `True` | Bật orientation; deskew vẫn chạy khi tắt |
+| `low_confidence` | `0.80` | Threshold đánh dấu dòng cần xem lại |
+| `save_outputs` | `False` | Tự lưu sau mỗi `predict()` |
+| `output_dir` | `"trueocr_outputs"` | Thư mục lưu mặc định |
 
 ```python
 from trueocr import OCRConfig, load_model
 
-model = load_model(OCRConfig(model_dir="/duong/dan/models", threads=2, low_confidence=0.9))
-model = load_model(model_dir="/duong/dan/models", mode="line")  # ghi đè từng trường
+config = OCRConfig(mode="line", threads=1)
+model = load_model(config, batch_size=64)
 ```
 
-| Trường | Mặc định | Ý nghĩa |
-|---|---|---|
-| `model_dir` | `trueocr/models` trong gói | Thư mục model |
-| `mode` | `"page"` | `"page"` hoặc `"line"` |
-| `threads` | `min(4, số CPU)` | Số CPU thread của ONNX Runtime |
-| `batch_size` | `32` | Số dòng mỗi lần chạy recognizer |
-| `auto_rotate` | `True` | Dùng `orient.onnx` để xoay ảnh |
-| `low_confidence` | `0.80` | Ngưỡng đánh dấu `low_confidence` |
-| `save_outputs` | `False` | Tự lưu kết quả sau mỗi `predict` |
-| `output_dir` | `trueocr_outputs` | Nơi lưu khi `save_outputs=True` |
+## Batch crop
 
-## Chất lượng và giới hạn
+Khi đã có crop từng dòng, gọi recognizer để bỏ qua phần đọc trang:
 
-Model `trueocr-vi-r01` có 1.060.035 tham số, file `rec.onnx` FP32 4,08 MiB.
-Trên 22.280 crop test nội bộ (giấy tờ tùy thân và hóa đơn), model đọc đúng toàn
-dòng 96,72%, tỷ lệ lỗi ký tự (CER) 0,66%. Tốc độ trung vị 1,62 ms/crop (p95
-2,46 ms) với 1 thread CPU Intel Xeon Platinum 8358P, batch 1.
+```python
+model = load_model(mode="line", threads=1)
+predictions = model.recognizer.predict(["dong_1.png", "dong_2.png"], batch_size=32)
+for prediction in predictions:
+    print(prediction.text, prediction.confidence)
+```
 
-- Recognizer chỉ đọc tiếng Việt và ký tự Latin cơ bản (222 ký tự), không dùng language model.
-- Crop một dòng cần sát chữ; lề quá rộng hoặc nhiều dòng có thể sinh thêm ký tự.
-- Model có thể nhận sai dấu tiếng Việt, nhất là ở font và bố cục khác dữ liệu huấn luyện.
-- Chất lượng chế độ `page` phụ thuộc cả bước phát hiện và cắt dòng, không suy
-  ra trực tiếp từ điểm trên crop.
+Recognizer nhận path, bytes hoặc NumPy `uint8` grayscale/BGR/BGRA. Kết quả
+giữ thứ tự đầu vào. Có thể khởi tạo riêng bằng
+`Recognizer(model_dir, threads=1)` từ `trueocr`.
+
+## CLI
+
+```bash
+trueocr anh.jpg
+trueocr crop.png --mode line --threads 1
+trueocr *.jpg --json --out output/
+trueocr --help
+```
+
+`--json` in một JSON mỗi ảnh trên một dòng. `--out` lưu thêm text, JSON và ảnh
+bbox. Khi một ảnh lỗi, CLI ghi lỗi ra stderr và tiếp tục ảnh sau; exit code
+là `1` nếu có ảnh lỗi, `0` nếu tất cả thành công.
+
+## Model riêng
+
+Model mặc định `trueocr-vi-r01` có charset 222 ký tự Việt/Latin cơ bản,
+CTC greedy decoding, không dùng language model.
+
+```python
+model = load_model(model_dir="/path/to/models")
+```
+
+CLI dùng `--model-dir`. Model phải tương thích với ONNX input/output contract và
+preprocessing của TrueOCR; thay charset đơn thuần không thêm được ký tự mới.
+
+| File | Vai trò |
+|---|---|
+| `rec.onnx` | Line recognition, CTC greedy decoding |
+| `det.onnx` | Text detection |
+| `orient.onnx` | Orientation |
+| `order.onnx` | Reading order |
+| `meta.json` | Charset và preprocessing parameters |
+
+Mode `line` chỉ cần `rec.onnx` và `meta.json`. Mode `page` cần đủ năm file.
+Chất lượng, tốc độ và phạm vi đánh giá nằm trong [benchmark](BENCHMARKS.md).

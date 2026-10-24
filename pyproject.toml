@@ -23,6 +23,11 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Image Recognition",
 ]
 
+[project.urls]
+Source = "https://github.com/pvd0anh/trueocr"
+Documentation = "https://github.com/pvd0anh/trueocr/blob/main/docs/USAGE.md"
+Issues = "https://github.com/pvd0anh/trueocr/issues"
+
 [project.optional-dependencies]
 notebook = ["ipython"]
 test = ["pytest"]

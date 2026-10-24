@@ -1,0 +1,69 @@
+{
+  "date": "2026-10-24",
+  "version": "0.1.0",
+  "track": "crop recognizer",
+  "batch_size": 32,
+  "threads": 1,
+  "normalization": "NFC + collapse whitespace + strip; preserve case, accents and punctuation",
+  "manifest_sha256": "5a11e785ad52ac08c29e9a891b63962c1e662a552e9302e06ef9dbd9a95d5942",
+  "selection_sha256": "01ec59af48bfc5cab722aa3a7fa7edcc5637e93c89c1e2acd6d3b9e3e7e8519f",
+  "predictions_sha256": "6aa8f5d75274e9418f6ba8f4e3612890655fb9bcd5747110378249ab763c05e6",
+  "engine": {
+    "version": "0.1.0",
+    "decoder": "greedy_ctc",
+    "weights_sha256": "360b800dcbebd1099270f703ac35a43a6c86b40de049c4be78a130184b3bfef0",
+    "source_sha256": {
+      "ocr.py": "fbdaa485d857647d3f061e2ce035538e94cb9d4236ad7f0793e1d058de9e8cd6",
+      "page.py": "e6d4153415621613ac50606ae83e911d6747b77b30f19b6c2b4b5f69f6f9a532",
+      "preprocess.py": "a10522c4ea1a0d1ea047cc3e6c4b9d8ed72b718889841130e8d77eadf78ce665",
+      "recognizer.py": "a90b6a9ca77b2e8a8fb648ae212172ea1e41a532a0f5bed0fe0835f251f03c1f",
+      "order.py": "9caa28bcbad2748e90729e6436b627b1fb9f55f25e50875c16825fe1ad69cee1",
+      "__init__.py": "7e4c89729edf153e4d714c386d4d6c41fea7f92735dc3fbf809e892e425152ec",
+      "cli.py": "7677db1391cc7e0b081e1eb0ee4253f7becc62721ba296bc883c3a9496f29d2a"
+    },
+    "entrypoint": "Recognizer.predict"
+  },
+  "datasets": {
+    "foundation_test": {
+      "n": 22280,
+      "errors": 0,
+      "exact": 21523,
+      "char_edits": 840,
+      "ref_chars": 123667,
+      "word_edits": 869,
+      "ref_words": 22503,
+      "exact_pct": 96.60233393177738,
+      "cer_pct": 0.6792434521739834,
+      "wer_pct": 3.861707327911834
+    },
+    "uit_hwdb_line_test": {
+      "n": 201,
+      "errors": 0,
+      "exact": 0,
+      "char_edits": 9749,
+      "ref_chars": 13102,
+      "word_edits": 2988,
+      "ref_words": 3006,
+      "exact_pct": 0.0,
+      "cer_pct": 74.40848725385437,
+      "wer_pct": 99.40119760479043
+    },
+    "vintext_test_words": {
+      "n": 10068,
+      "errors": 0,
+      "exact": 4153,
+      "char_edits": 13258,
+      "ref_chars": 37254,
+      "word_edits": 6076,
+      "ref_words": 10136,
+      "exact_pct": 41.249503377036156,
+      "cer_pct": 35.58812476512589,
+      "wer_pct": 59.94475138121547
+    }
+  },
+  "dataset_notes": {
+    "foundation_test": "22,280 internal legacy diagnostic crops: 12,564 ID fields + 9,716 legacy receipt-bucket crops. The receipt bucket has not been verified as real invoices. Used in prior R&D; not an independent production gold set.",
+    "vintext_test_words": "10,068 word crops from the official unseen test split, rectified once and frozen as PNG. Public labels not re-annotated.",
+    "uit_hwdb_line_test": "201 line images rendered from handwriting strokes, 6 writers; not camera photographs of handwritten pages."
+  }
+}
